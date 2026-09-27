@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-// ১. ডাটা ইন-মেমরিতে সংরক্ষণের জন্য Struct ও Thread-safe Map
+// 1. Struct and thread-safe map for storing data in memory.
 type URLStore struct {
 	mu    sync.RWMutex
 	store map[string]string // ShortCode -> LongURL
@@ -31,14 +31,14 @@ type ShortenResponse struct {
 	Code     string `json:"code"`
 }
 
-// ২. ৬ অক্ষরের র‍্যান্ডম সিক্রেট কোড তৈরি করার হেলপার ফাংশন
+// 2. Helper function to generate a random 6-character code.
 func generateShortCode() string {
 	bytes := make([]byte, 3) // 3 bytes = 6 hex characters
 	_, _ = rand.Read(bytes)
 	return hex.EncodeToString(bytes)
 }
 
-// ৩. POST /api/v1/shorten - URL সংক্ষিপ্ত করার হ্যান্ডলার
+// 3. POST /api/v1/shorten - handler for shortening URLs.
 func shortenHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -55,31 +55,31 @@ func shortenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// URL-এ http:// বা https:// না থাকলে যোগ করা
+	// Add a scheme if the URL does not already include one.
 	if !strings.HasPrefix(req.URL, "http://") && !strings.HasPrefix(req.URL, "https://") {
 		req.URL = "https://" + req.URL
 	}
 
-	// ইউনিক শর্ট কোড জেনারেট করা
+	// Generate a unique short code.
 	code := generateShortCode()
 
-	// মেমরিতে শর্ট কোড ও আসল ইউআরএল ম্যাপ করে রাখা
+	// Map the short code to the original URL in memory.
 	store.mu.Lock()
 	store.store[code] = req.URL
 	store.mu.Unlock()
 
 	shortURL := fmt.Sprintf("http://%s/%s", r.Host, code)
 
-	w.WriteHeader(http.StatusCreated) // 201 Created
+	w.WriteHeader(http.StatusCreated) // 201 Created.
 	_ = json.NewEncoder(w).Encode(ShortenResponse{
 		ShortURL: shortURL,
 		Code:     code,
 	})
 }
 
-// ৪. GET /{code} - আসল ওয়েবসাইটে রিডাইরেক্ট করার হ্যান্ডলার
+// 4. GET /{code} - handler for redirecting to the original URL.
 func redirectHandler(w http.ResponseWriter, r *http.Request) {
-	// Root (/) পাথ এড়িয়ে শুধু কোড ফিল্টার করা
+	// Ignore the root (/) path and extract the short code.
 	code := strings.TrimPrefix(r.URL.Path, "/")
 	if code == "" {
 		http.Error(w, "Short code required", http.StatusBadRequest)
@@ -91,21 +91,21 @@ func redirectHandler(w http.ResponseWriter, r *http.Request) {
 	store.mu.RUnlock()
 
 	if !exists {
-		http.Error(w, "URL not found", http.StatusNotFound) // 404
+		http.Error(w, "URL not found", http.StatusNotFound) // 404 Not Found.
 		return
 	}
 
-	// HTTP 302 Found দিয়ে মূল লিংকে Redirect করা
+	// Redirect to the original URL with HTTP 302 Found.
 	http.Redirect(w, r, longURL, http.StatusFound)
 }
 
 func main() {
 	mux := http.NewServeMux()
 
-	// API Route
+	// API route.
 	mux.HandleFunc("/api/v1/shorten", shortenHandler)
 
-	// Catch-all Route for redirection (উদা: http://localhost:8080/a1b2c3)
+	// Catch-all route for redirects (for example, http://localhost:8080/a1b2c3).
 	mux.HandleFunc("/", redirectHandler)
 
 	addr := ":8080"
